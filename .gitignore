@@ -63,3 +63,8 @@ __pycache__/
 
 # ignore SQLite files
 *.sqlite
+
+# ignore conversation memory files
+*.convo
+*.sqlite-shm
+*.sqlite-wal
