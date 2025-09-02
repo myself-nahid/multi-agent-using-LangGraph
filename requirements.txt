@@ -1,3 +1,5 @@
 fastapi
 uvicorn[standard]
 langchain
+chromadb
+langchain_google_genai
