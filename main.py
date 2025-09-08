@@ -9,19 +9,26 @@ from langchain_core.messages import HumanMessage
 
 from graph import create_graph
 import database
+from offer_service import app as offer_app
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
-    Context manager to set up the agentic graph on startup and clean up on shutdown.
+    Context manager to set up the agentic graph and the mounted offer service on startup.
     """
     database.init_db()
+    
+    await offer_app.router.startup()
+
     async with AsyncSqliteSaver.from_conn_string("conversation_memory.sqlite") as memory:
         agentic_graph = create_graph(checkpointer=memory)
         app.state.agentic_graph = agentic_graph
         yield
+        await offer_app.router.shutdown()
 
 app = FastAPI(title="Full Multi-Agent AI Platform", lifespan=lifespan)
+
+app.mount("/offers-api", offer_app, name="offers_api")
 
 class UserQuery(BaseModel):
     message: str
@@ -35,7 +42,7 @@ async def get_workflows():
 
 @app.post("/chat")
 async def handle_chat(request: Request, query: UserQuery):
-    """Main chat endpoint that handles a full request/response cycle and returns a single JSON object."""
+    """Main chat endpoint that returns a single JSON object."""
     agentic_graph = request.app.state.agentic_graph
     session_id = query.session_id or str(uuid.uuid4())
     
@@ -50,13 +57,11 @@ async def handle_chat(request: Request, query: UserQuery):
 
     ai_response_message = final_state["messages"][-1]
     response_content = ai_response_message.content
-    
     agent_name = final_state.get("agent_name", query.agent_type)
 
     response_data = {
         "session_id": session_id,
-        "response": response_content
+        "response": response_content,
+        "agent_name": agent_name
     }
-    print(f"--- Session {session_id} handled by {agent_name} ---")  
-    print(f"Response: {response_content}")
     return JSONResponse(content=response_data)

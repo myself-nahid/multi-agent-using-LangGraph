@@ -6,4 +6,5 @@ langchain_google_genai
 langchain_tavily
 langgraph
 langgraph-checkpoint-sqlite
+tavily-python
 sse-starlette
