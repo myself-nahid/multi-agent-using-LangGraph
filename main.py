@@ -1,10 +1,10 @@
 import uuid
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Dict, Any, List
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
-from fastapi.responses import StreamingResponse
 from langchain_core.messages import HumanMessage
 
 from graph import create_graph
@@ -16,13 +16,12 @@ async def lifespan(app: FastAPI):
     Context manager to set up the agentic graph on startup and clean up on shutdown.
     """
     database.init_db()
-    
     async with AsyncSqliteSaver.from_conn_string("conversation_memory.sqlite") as memory:
         agentic_graph = create_graph(checkpointer=memory)
         app.state.agentic_graph = agentic_graph
         yield
 
-app = FastAPI(title="Multi-Agent AI Platform", lifespan=lifespan)
+app = FastAPI(title="Full Multi-Agent AI Platform", lifespan=lifespan)
 
 class UserQuery(BaseModel):
     message: str
@@ -36,27 +35,28 @@ async def get_workflows():
 
 @app.post("/chat")
 async def handle_chat(request: Request, query: UserQuery):
-    """Main chat endpoint that handles persistent, multi-turn conversations."""
+    """Main chat endpoint that handles a full request/response cycle and returns a single JSON object."""
     agentic_graph = request.app.state.agentic_graph
     session_id = query.session_id or str(uuid.uuid4())
     
     config = {"configurable": {"thread_id": session_id}}
-
     inputs = {"messages": [HumanMessage(content=query.message)]}
     
     if not database.workflow_exists(session_id):
         database.create_workflow(session_id, query.agent_type)
         inputs["agent_name"] = query.agent_type
 
-    response_stream = agentic_graph.astream_events(inputs, config=config, version="v1")
-    
-    async def stream_generator():
-        """Generator to stream only the content chunks back to the client."""
-        yield f"session_id: {session_id}\n\n"
-        async for event in response_stream:
-            if event["event"] == "on_chat_model_stream":
-                chunk = event["data"]["chunk"]
-                if chunk.content:
-                    yield chunk.content
+    final_state = await agentic_graph.ainvoke(inputs, config=config)
 
-    return StreamingResponse(stream_generator(), media_type="text/plain")
+    ai_response_message = final_state["messages"][-1]
+    response_content = ai_response_message.content
+    
+    agent_name = final_state.get("agent_name", query.agent_type)
+
+    response_data = {
+        "session_id": session_id,
+        "response": response_content
+    }
+    print(f"--- Session {session_id} handled by {agent_name} ---")  
+    print(f"Response: {response_content}")
+    return JSONResponse(content=response_data)
