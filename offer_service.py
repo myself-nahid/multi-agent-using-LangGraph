@@ -67,15 +67,21 @@ async def fetch_offers_for_async(agent_name: str, search_term: str, location: st
     try:
         loop = asyncio.get_running_loop()
         resp = await loop.run_in_executor(
-            None, lambda: tavily.search(q, include_raw_content=True, max_results=max_results)
+            None, 
+            lambda: tavily.search(q, include_raw_content=True, max_results=max_results, include_images=True)
         )
+        
+        print(f"\n--- RAW TAVILY RESPONSE for query: '{q}' ---")
+        print(json.dumps(resp, indent=2))
+        print("--- END RAW TAVILY RESPONSE ---\n")
+
         results = resp.get("results", [])
     except Exception as e:
         print(f"Tavily search error: {e}")
         results = []
     
     for item in results:
-        item['category'] = agent_name  
+        item['category'] = agent_name
         item['original_location'] = location
         
     return results
@@ -112,12 +118,15 @@ async def update_loop():
         new_offers = []
         for i, item in enumerate(all_raw_results):
             if item.get("url") and not any(existing["id"] == item["url"] for existing in new_offers):
+                images = item.get("images", [])
+                image_url = images[0] if images else None
+
                 new_offers.append({
                     "id": item.get("url"),
                     "title": item.get("title", ""),
                     "summary": summaries[i],
-                    "url": item.get("url"),
-                    "category": item['category'],  
+                    "image_url": image_url,
+                    "category": item['category'],
                     "location": item['original_location']
                 })
 
