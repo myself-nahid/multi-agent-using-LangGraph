@@ -8,3 +8,4 @@ langgraph
 langgraph-checkpoint-sqlite
 tavily-python
 sse-starlette
+playwright

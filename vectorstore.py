@@ -10,10 +10,9 @@ client = chromadb.Client()
 
 email_collection = client.get_or_create_collection(
     name="user_emails",
-    metadata={"hnsw:space": "cosine"} # cosine distance for semantic search
+    metadata={"hnsw:space": "cosine"} 
 )
 
-# Google's embedding model
 embedding_function = GoogleGenerativeAIEmbeddings(
     model="models/gemini-embedding-001",
     google_api_key=os.getenv("GOOGLE_API_KEY")

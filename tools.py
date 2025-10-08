@@ -1,14 +1,47 @@
+import os
 import json
 from langchain_tavily import TavilySearch
 from langchain_core.tools import tool
 import database
 import vectorstore
 from offer_service import _offers
+from playwright.async_api import async_playwright
+import asyncio
 
-web_search_tool = TavilySearch(
-    max_results=4, 
-    description="A web search tool to find real-time information on flights, hotels, restaurants, events, and more."
-)
+web_search_tool = TavilySearch(max_results=4)
+
+@tool
+async def scrape_page_for_images(url: str) -> str:
+    """
+    Scrapes a single webpage to find and return a list of up to 10 high-quality image URLs.
+    Use this specialized tool when a previous search returned a good result but with no image URL.
+    This is a powerful but slow tool, so use it only when necessary.
+    """
+    print(f"--- Starting Playwright to scrape images from: {url} ---")
+    try:
+        async with async_playwright() as p:
+            browser = await p.chromium.launch()
+            page = await browser.new_page()
+            await page.goto(url, wait_until="networkidle", timeout=15000)
+            
+            # Find all <img> tags, get their 'src' attribute, and filter for valid URLs
+            image_urls = await page.eval_on_all("img", """(images) =>
+                images.map(img => img.src).filter(src => src.startsWith('http'))
+            """)
+            
+            await browser.close()
+            
+            if not image_urls:
+                return "No usable images found on the page."
+            
+            # Return up to the first 10 images found
+            unique_urls = list(dict.fromkeys(image_urls)) # Remove duplicates
+            print(f"--- Found {len(unique_urls)} images from {url} ---")
+            return json.dumps(unique_urls[:10])
+
+    except Exception as e:
+        print(f"--- Playwright scraping failed for {url}: {e} ---")
+        return f"Error scraping page: {e}"
 
 @tool
 def get_available_offers(category: str, location: str) -> str:
@@ -58,7 +91,6 @@ def update_task_status(session_id: str, status: str, details: dict) -> str:
     database.update_workflow(session_id, status, details)
     return f"Status for session {session_id} updated successfully to {status}."
 
-booking_tools = [web_search_tool, update_task_status, get_available_offers]
+booking_tools = [web_search_tool, get_available_offers, update_task_status, scrape_page_for_images]
 email_agent_tools = [search_user_emails, update_task_status]
-
 all_tools = booking_tools + email_agent_tools
