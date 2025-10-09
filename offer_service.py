@@ -18,8 +18,8 @@ load_dotenv()
 TAVILY_KEY = os.getenv("TAVILY_API_KEY")
 GOOGLE_KEY = os.getenv("GOOGLE_API_KEY")
 
-print("ENV CHECK: TAVILY_KEY present?", bool(TAVILY_KEY))
-print("ENV CHECK: GOOGLE_KEY present?", bool(GOOGLE_KEY))
+print("ENV CHECK: TAVILY_API_KEY present?", bool(TAVILY_KEY))
+print("ENV CHECK: GOOGLE_API_KEY present?", bool(GOOGLE_KEY))
 
 if not TAVILY_KEY or not GOOGLE_KEY:
     raise RuntimeError("Please set TAVILY_API_KEY and GOOGLE_API_KEY in .env")
@@ -27,7 +27,7 @@ if not TAVILY_KEY or not GOOGLE_KEY:
 class Price(BaseModel):
     original_price: Optional[float] = Field(description="The numerical value of the standard/list/original price. Null if not found.")
     offer_price: Optional[float] = Field(description="The numerical value of the sale/discounted/'starting from' price. Null if not found.")
-    currency: Optional[str] = Field(description="The 3-letter ISO currency code for the prices found (e.g., 'USD', 'SAR', 'AED').")
+    currency: Optional[str] = Field(description="The 3-letter ISO currency code for the prices found (e.g., 'USD', 'EUR', 'SAR').")
 
 summarize_llm = ChatGoogleGenerativeAI(model="gemini-2.5-pro", temperature=0.0)
 structured_llm = ChatGoogleGenerativeAI(model="gemini-2.5-pro", temperature=0.0).with_structured_output(Price)
@@ -65,10 +65,10 @@ async def extract_prices_with_gemini_async(text: str, retries: int = 2) -> dict:
     prompt = f"""
     You are an expert data extraction assistant. Analyze the text to identify price information.
     RULES:
-    1. Find 'offer_price' (e.g., "from SAR 500", "sale $99"). This is most important.
-    2. Find 'original_price' if it is also mentioned (e.g., a crossed-out price).
-    3. Extract only numerical values (e.g., 500, 99.0).
-    4. You MUST identify the 3-letter ISO currency code (e.g., 'SAR', 'USD', 'AED'). If you find a price but cannot determine the currency, all fields must be null.
+    1. Find 'offer_price' (e.g., "from $99", "sale €50"). This is most important.
+    2. Find 'original_price' if it is also mentioned (e.g., a crossed-out list price).
+    3. Extract only numerical values (e.g., 99.0, 50).
+    4. You MUST identify the 3-letter ISO currency code (e.g., 'USD', 'EUR', 'SAR'). If you find a price but cannot determine the currency, all fields must be null.
     5. Ignore non-monetary values like "points". If a value is not found, it must be null.
     Text to analyze: --- {text} ---
     """
@@ -81,7 +81,7 @@ async def extract_prices_with_gemini_async(text: str, retries: int = 2) -> dict:
             if attempt < retries - 1: await asyncio.sleep(1)
     return default_price
 
-async def fetch_offers_for_async(agent_name: str, search_term: str, location: str, max_results: int = 4) -> List[Dict[str, Any]]:
+async def fetch_offers_for_async(agent_name: str, search_term: str, location: str, max_results: int = 2) -> List[Dict[str, Any]]: # Reduced to 2 for more diversity
     q = f'"{search_term}" in {location}'
     try:
         loop = asyncio.get_running_loop()
@@ -104,30 +104,65 @@ async def fetch_offers_for_async(agent_name: str, search_term: str, location: st
 
 async def update_loop():
     load_cache()
+    # --- NEW, EXPANDED, AND WORLDWIDE QUERIES LIST ---
     queries = [
-        # Hotels within KSA and popular nearby destinations
+        # == HotelReservation ==
+        # Middle East
         ("HotelReservation", "luxury 5-star hotels", "Riyadh"),
         ("HotelReservation", "Jeddah corniche hotels with sea view", "Jeddah"),
         ("HotelReservation", "AlUla desert resorts deals", "AlUla, Saudi Arabia"),
-        ("HotelReservation", "family hotel deals", "Dubai"),
+        ("HotelReservation", "luxury hotels near Burj Khalifa", "Dubai"),
+        # Europe
+        ("HotelReservation", "luxury hotels with Eiffel Tower view", "Paris"),
+        ("HotelReservation", "boutique hotels in central", "London"),
+        ("HotelReservation", "hotels near the Colosseum", "Rome"),
+        ("HotelReservation", "canal view hotels", "Amsterdam"),
+        # North America
+        ("HotelReservation", "5-star hotels in Times Square", "New York"),
+        ("HotelReservation", "luxury hotels on the Strip", "Las Vegas"),
+        ("HotelReservation", "all-inclusive beach resorts", "Cancun, Mexico"),
+        # Asia & Oceania
+        ("HotelReservation", "budget hotel deals near Shibuya Crossing", "Tokyo"),
+        ("HotelReservation", "hotels with rooftop pool", "Singapore"),
+        ("HotelReservation", "beach villas", "Maldives"),
+        ("HotelReservation", "hotels with Sydney Opera House view", "Sydney"),
 
-        # Restaurants in major KSA cities
+        # == RestaurantBooking ==
+        # Middle East & Europe
         ("RestaurantBooking", "fine dining restaurants", "Riyadh"),
-        ("RestaurantBooking", "best seafood restaurants", "Jeddah"),
+        ("RestaurantBooking", "celebrity chef restaurants", "Dubai"),
+        ("RestaurantBooking", "michelin star restaurants", "London"),
+        ("RestaurantBooking", "best pasta restaurants", "Rome, Italy"),
+        # North America & Asia
+        ("RestaurantBooking", "omakase sushi experience", "Tokyo"),
+        ("RestaurantBooking", "rooftop restaurants with city view", "Bangkok"),
+        ("RestaurantBooking", "best steakhouse", "New York"),
         
-        # Spas in KSA
+        # == SpaBooking ==
         ("SpaBooking", "luxury spa packages for women", "Riyadh"),
+        ("SpaBooking", "luxury spa and wellness retreats", "Bali, Indonesia"),
+        ("SpaBooking", "day spa packages", "New York"),
+        ("SpaBooking", "thermal baths and spa", "Budapest, Hungary"),
 
-        # Events and Concerts within KSA
+        # == ConcertTicketsBooking ==
         ("ConcertTicketsBooking", "Riyadh Season event tickets", "Riyadh"),
-        ("ConcertTicketsBooking", "upcoming concerts", "Jeddah"),
+        ("ConcertTicketsBooking", "upcoming concerts and music festivals", "Los Angeles"),
+        ("ConcertTicketsBooking", "tickets for broadway shows", "New York"),
+        ("ConcertTicketsBooking", "concerts at the O2 Arena", "London"),
+        ("ConcertTicketsBooking", "K-pop concerts", "Seoul"),
 
-        # Venues for celebrations in KSA
-        ("BirthdayBooking", "private party venues", "Riyadh"),
+        # == BirthdayBooking ==
+        ("BirthdayBooking", "private yacht party rental", "Miami"),
+        ("BirthdayBooking", "rooftop birthday party venue", "Sydney"),
+        ("BirthdayBooking", "desert safari private dinner", "Dubai"),
+        ("BirthdayBooking", "castle rental for events", "Scotland, UK"),
 
-        # Flights from KSA to popular international destinations
+        # == FlightBooking ==
         ("FlightBooking", "Saudia business class deals from Riyadh to London", "Saudi Arabia"),
-        ("FlightBooking", "flynas cheap flights from Jeddah to Cairo", "Saudi Arabia")
+        ("FlightBooking", "Emirates first class deals from Dubai to New York", "UAE"),
+        ("FlightBooking", "British Airways cheap flights from London to New York", "UK"),
+        ("FlightBooking", "Qantas flights from Sydney to Los Angeles", "Australia"),
+        ("FlightBooking", "Singapore Airlines suites from Singapore to Tokyo", "Singapore")
     ]
     
     while True:
