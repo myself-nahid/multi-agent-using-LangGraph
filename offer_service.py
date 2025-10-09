@@ -29,8 +29,8 @@ class Price(BaseModel):
     offer_price: Optional[float] = Field(description="The numerical value of the sale/discounted/'starting from' price. Null if not found.")
     currency: Optional[str] = Field(description="The 3-letter ISO currency code for the prices found (e.g., 'USD', 'EUR', 'SAR').")
 
-summarize_llm = ChatGoogleGenerativeAI(model="gemini-2.5-pro", temperature=0.0)
-structured_llm = ChatGoogleGenerativeAI(model="gemini-2.5-pro", temperature=0.0).with_structured_output(Price)
+summarize_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite", temperature=0.0)
+structured_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite", temperature=0.0).with_structured_output(Price)
 
 CACHE_FILE = "offers_cache.json"
 POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL_SECONDS", "3600"))

@@ -12,7 +12,7 @@ def create_agent(llm: ChatGoogleGenerativeAI, tools: list, system_prompt: str):
     agent = create_tool_calling_agent(llm, tools, prompt)
     return AgentExecutor(agent=agent, tools=tools, verbose=True).with_config({"run_name": "agent"})
 
-llm = ChatGoogleGenerativeAI(model="gemini-2.5-pro", temperature=0.0)
+llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite", temperature=0.0)
     
 system_prompt_suffix = """
 
