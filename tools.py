@@ -1,5 +1,8 @@
+# FILE: tools.py
+
 import json
 from datetime import datetime
+from typing import Optional
 from langchain_tavily import TavilySearch
 from langchain_core.tools import tool
 from langchain_core.pydantic_v1 import BaseModel, Field
@@ -8,14 +11,12 @@ import vectorstore
 from offer_service import _offers
 
 # --- Tool Initialization ---
-web_search_tool = TavilySearch(
+tavily_search = TavilySearch(
     max_results=4, 
     description="A general web search tool for finding real-time information when other tools don't have the answer."
 )
 
 # --- Pydantic Schemas for Action Tools ---
-# These schemas define the required arguments for each booking tool.
-
 class BookFlightArgs(BaseModel):
     session_id: str = Field(description="The unique session ID for the current conversation.")
     flight_number: str = Field(description="The flight number of the flight to be booked, e.g., 'BA2490'.")
@@ -48,6 +49,14 @@ class BookConcertArgs(BaseModel):
     event_name: str = Field(description="The name of the concert or event.")
     artist_name: str = Field(description="The name of the artist performing.")
     num_tickets: int = Field(description="The number of tickets to purchase.")
+
+# --- NEW: Schema for the Birthday Venue Tool ---
+class BookBirthdayVenueArgs(BaseModel):
+    session_id: str = Field(description="The unique session ID for the current conversation.")
+    venue_name: str = Field(description="The name of the venue to book for the birthday.")
+    date: str = Field(description="The date of the event in 'YYYY-MM-DD' format.")
+    num_guests: int = Field(description="The number of guests attending.")
+    special_requests: Optional[str] = Field(description="Any special requests for the booking, e.g., 'cake needed'.")
 
 # --- Action Tools ---
 
@@ -91,7 +100,16 @@ def book_concert_tickets(session_id: str, event_name: str, artist_name: str, num
     database.update_workflow(session_id, "Complete", booking_details)
     return f"Booking confirmed! {num_tickets} tickets for {artist_name} at {event_name} have been purchased."
 
-# --- Information Gathering Tools (Unchanged) ---
+# --- NEW: The 'book_birthday_venue' tool ---
+@tool(args_schema=BookBirthdayVenueArgs)
+def book_birthday_venue(session_id: str, venue_name: str, date: str, num_guests: int, special_requests: str = "None") -> str:
+    """Books a venue for a birthday party and completes the workflow."""
+    print(f"--- SIMULATING BIRTHDAY VENUE BOOKING for session {session_id} ---")
+    booking_details = {"venue": venue_name, "date": date, "guests": num_guests, "requests": special_requests, "status": "Confirmed"}
+    database.update_workflow(session_id, "Complete", booking_details)
+    return f"Booking confirmed! The venue '{venue_name}' is booked for {num_guests} guests on {date}."
+
+# --- Information Gathering Tools ---
 @tool
 def get_available_offers(category: str, location: str) -> str:
     """Looks up available deals from the pre-fetched internal cache. This should be the first tool you use."""
@@ -110,8 +128,9 @@ def update_task_status(session_id: str, status: str, details: dict) -> str:
 
 # --- Tool Lists for Agents ---
 booking_tools = [
-    web_search_tool, get_available_offers, update_task_status, 
-    book_flight, book_hotel, book_restaurant, book_spa_appointment, book_concert_tickets
+    tavily_search, get_available_offers, update_task_status, 
+    book_flight, book_hotel, book_restaurant, book_spa_appointment, book_concert_tickets,
+    book_birthday_venue # Add the new tool to the list
 ]
 email_agent_tools = [search_user_emails, update_task_status]
 all_tools = booking_tools + email_agent_tools
